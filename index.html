@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 49 - The Legend Of Cheating</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+            background-color: #090d16;
+            color: #f1f5f9;
+        }
+
+        .cinzel { font-family: 'Cinzel', serif; }
+
+        canvas#webgl-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Glassmorphism UI Style */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+
+        .glass-btn {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-btn:hover {
+            background: rgba(51, 65, 85, 0.9);
+            border-color: #6366f1;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Floating Damage Text */
+        .dmg-text {
+            position: absolute;
+            font-weight: 800;
+            font-size: 1.25rem;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+            z-index: 50;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { transform: translateY(-30px) scale(1.2); }
+            100% { opacity: 0; transform: translateY(-50px) scale(0.9); }
+        }
+
+        /* Health & Mana Bars */
+        .bar-fill {
+            transition: width 0.3s ease-out;
+        }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- Crosshair for First Person Mode -->
+    <div id="crosshair" class="crosshair hidden">
+        <div class="w-3 h-3 border-2 border-indigo-400 rounded-full opacity-70"></div>
+    </div>
+
+    <!-- HUD Layer -->
+    <div id="hud-layer" class="relative z-10 w-full h-full pointer-events-none flex flex-col justify-between p-4 sm:p-6 hidden">
+        
+        <!-- Top Stats Bar & Mini Map -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Player Stats Box -->
+            <div class="glass-panel p-4 rounded-xl pointer-events-auto w-72 sm:w-80 border-l-4 border-l-indigo-500">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="hud-player-name" class="font-bold text-lg text-indigo-300 cinzel tracking-wide">Scholar</span>
+                    <span id="hud-player-level" class="text-xs font-bold px-2 py-0.5 rounded bg-indigo-900/80 text-indigo-200 border border-indigo-500/30">LVL 1</span>
+                </div>
+                
+                <!-- HP Bar -->
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-rose-400"><i class="fa-solid fa-heart mr-1"></i> HP</span>
+                        <span id="hp-text" class="text-slate-300">100 / 100</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-900/80 rounded-full overflow-hidden p-0.5 border border-rose-900/50">
+                        <div id="hp-bar" class="h-full bg-gradient-to-r from-rose-600 to-red-500 rounded-full bar-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- MP Bar -->
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-sky-400"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> MP</span>
+                        <span id="mp-text" class="text-slate-300">50 / 50</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-900/80 rounded-full overflow-hidden p-0.5 border border-sky-900/50">
+                        <div id="mp-bar" class="h-full bg-gradient-to-r from-sky-600 to-cyan-400 rounded-full bar-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- XP Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-semibold mb-1">
+                        <span class="text-amber-400"><i class="fa-solid fa-book-bookmark mr-1"></i> Knowledge (XP)</span>
+                        <span id="xp-text" class="text-slate-300">0 / 100</span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-900/80 rounded-full overflow-hidden p-0.5 border border-amber-900/50">
+                        <div id="xp-bar" class="h-full bg-amber-400 rounded-full bar-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Quest & Minimap Container -->
+            <div class="flex gap-4 items-start">
+                <!-- Quest Tracker -->
+                <div class="glass-panel p-4 rounded-xl pointer-events-auto w-64 border-r-4 border-r-amber-500 hidden sm:block">
+                    <div class="flex items-center gap-2 mb-1 text-amber-400 font-bold text-sm tracking-wider uppercase">
+                        <i class="fa-solid fa-scroll"></i>
+                        <span>Active Objective</span>
+                    </div>
+                    <h4 id="hud-quest-title" class="font-semibold text-slate-100 text-sm mb-1">Pass the Orthodox Exam</h4>
+                    <p id="hud-quest-desc" class="text-xs text-slate-400 leading-relaxed">Collect 5 Knowledge Orbs scattered in the No Cheating College Grounds.</p>
+                    <div id="hud-quest-progress" class="mt-2 text-xs font-bold text-amber-300">Orbs: 0 / 5</div>
+                </div>
+
+                <!-- Mini Map Radar -->
+                <div class="glass-panel p-2 rounded-xl pointer-events-auto relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center overflow-hidden">
+                    <div class="absolute inset-0 opacity-20 border border-indigo-500/40 rounded-full m-2"></div>
+                    <div class="absolute inset-0 opacity-40 border border-indigo-500/20 rounded-full m-6"></div>
+                    <div id="minimap-player" class="w-2.5 h-2.5 bg-indigo-400 rounded-full border border-white z-10 shadow-[0_0_8px_#818cf8]"></div>
+                    <div id="minimap-icons" class="absolute inset-0"></div>
+                    <span class="absolute top-1 text-[10px] font-bold text-indigo-300/60">NORTH</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Boss Health Bar (Hidden by default) -->
+        <div id="boss-hp-container" class="glass-panel p-4 rounded-xl pointer-events-auto max-w-lg mx-auto w-full border-t-2 border-amber-500 hidden mb-4">
+            <div class="flex justify-between items-center mb-1">
+                <span id="boss-name" class="font-bold text-amber-400 cinzel text-sm sm:text-base">The Legend Of Cheating (Wizard Orthodox)</span>
+                <span id="boss-hp-text" class="text-xs font-semibold text-slate-300">1000 / 1000</span>
+            </div>
+            <div class="w-full h-4 bg-slate-900/90 rounded-full overflow-hidden p-0.5 border border-amber-500/40">
+                <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-amber-600 via-red-500 to-rose-600 rounded-full bar-fill" style="width: 100%;"></div>
+            </div>
+        </div>
+
+        <!-- Bottom Action Bar & Skill Cooldowns -->
+        <div class="flex justify-between items-end w-full">
+            <!-- Navigation & Modals Quick Buttons -->
+            <div class="flex gap-2 pointer-events-auto">
+                <button onclick="toggleModal('inventory-modal')" class="glass-btn p-3 rounded-xl text-slate-200 hover:text-indigo-400 flex flex-col items-center gap-1 text-xs">
+                    <i class="fa-solid fa-bag-shopping text-base"></i>
+                    <span class="hidden sm:inline">Bag (I)</span>
+                </button>
+                <button onclick="toggleModal('quest-modal')" class="glass-btn p-3 rounded-xl text-slate-200 hover:text-amber-400 flex flex-col items-center gap-1 text-xs">
+                    <i class="fa-solid fa-map text-base"></i>
+                    <span class="hidden sm:inline">Quests (Q)</span>
+                </button>
+                <button onclick="toggleModal('skills-modal')" class="glass-btn p-3 rounded-xl text-slate-200 hover:text-cyan-400 flex flex-col items-center gap-1 text-xs">
+                    <i class="fa-solid fa-book-open-reader text-base"></i>
+                    <span class="hidden sm:inline">Skills (K)</span>
+                </button>
+                <button onclick="toggleModal('lore-modal')" class="glass-btn p-3 rounded-xl text-slate-200 hover:text-emerald-400 flex flex-col items-center gap-1 text-xs">
+                    <i class="fa-solid fa-scroll text-base"></i>
+                    <span class="hidden sm:inline">Story (L)</span>
+                </button>
+                <button id="cam-toggle-btn" onclick="toggleCameraView()" class="glass-btn p-3 rounded-xl text-slate-200 hover:text-purple-400 flex flex-col items-center gap-1 text-xs">
+                    <i class="fa-solid fa-video text-base"></i>
+                    <span class="hidden sm:inline">Cam (C)</span>
+                </button>
+            </div>
+
+            <!-- Attack & Spells Quick Bar -->
+            <div class="flex gap-2 sm:gap-3 pointer-events-auto">
+                <!-- Skill 1 -->
+                <button onclick="useSkill(1)" class="glass-btn w-12 h-12 sm:w-14 sm:h-14 rounded-xl relative flex flex-col items-center justify-center border-indigo-500/40">
+                    <i class="fa-solid fa-bolt text-indigo-400 text-lg"></i>
+                    <span class="text-[10px] text-slate-400 font-bold mt-1">1</span>
+                    <div id="cd-1" class="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center text-xs font-bold text-indigo-300 hidden">3s</div>
+                </button>
+                <!-- Skill 2 -->
+                <button onclick="useSkill(2)" class="glass-btn w-12 h-12 sm:w-14 sm:h-14 rounded-xl relative flex flex-col items-center justify-center border-sky-500/40">
+                    <i class="fa-solid fa-shield-halved text-sky-400 text-lg"></i>
+                    <span class="text-[10px] text-slate-400 font-bold mt-1">2</span>
+                    <div id="cd-2" class="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center text-xs font-bold text-sky-300 hidden">8s</div>
+                </button>
+                <!-- Skill 3 -->
+                <button onclick="useSkill(3)" class="glass-btn w-12 h-12 sm:w-14 sm:h-14 rounded-xl relative flex flex-col items-center justify-center border-amber-500/40">
+                    <i class="fa-solid fa-gavel text-amber-400 text-lg"></i>
+                    <span class="text-[10px] text-slate-400 font-bold mt-1">3</span>
+                    <div id="cd-3" class="absolute inset-0 bg-slate-950/80 rounded-xl flex items-center justify-center text-xs font-bold text-amber-300 hidden">12s</div>
+                </button>
+                <!-- Basic Attack -->
+                <button onclick="playerAttack()" class="glass-btn w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-indigo-600/30 border-indigo-400 flex flex-col items-center justify-center hover:bg-indigo-600/50">
+                    <i class="fa-solid fa-pen-nib text-indigo-200 text-xl"></i>
+                    <span class="text-[10px] text-indigo-300 font-bold mt-1">L-CLICK / F</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen & Class Selection Overlay -->
+    <div id="start-screen" class="absolute inset-0 z-40 glass-panel flex flex-col items-center justify-center p-6 bg-slate-950/90">
+        <div class="max-w-2xl text-center">
+            <span class="text-indigo-400 font-bold text-xs uppercase tracking-widest bg-indigo-950/60 border border-indigo-500/30 px-3 py-1 rounded-full">Bedtime Stories - April 6, 2020</span>
+            <h1 class="text-3xl sm:text-5xl font-black cinzel text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-amber-200 to-rose-300 mt-3 mb-2">CHAPTER 49</h1>
+            <h2 class="text-xl sm:text-2xl font-bold cinzel text-amber-400 tracking-wider mb-6">THE LEGEND OF CHEATING</h2>
+            
+            <p class="text-sm text-slate-300 leading-relaxed mb-8">
+                Welcome to <strong class="text-indigo-300">No Cheating College School</strong>! The strict disciplinarian Professor Orthodox has turned into a legendary wizard to punish lazy cheaters. Select your scholar class to embark on the quest for true knowledge.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                <!-- Class Option 1 -->
+                <div onclick="selectClass('Honest Scholar')" id="class-card-0" class="glass-btn p-4 rounded-xl cursor-pointer text-left border-indigo-500/50 bg-indigo-950/30 hover:border-indigo-400 transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xl mb-2">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-100 text-sm">Honest Scholar</h3>
+                    <p class="text-xs text-slate-400 mt-1">High Magic & Knowledge Mana reserve.</p>
+                    <div class="mt-3 text-[11px] text-indigo-300 font-semibold">HP: 90 | MP: 80 | ATK: 18</div>
+                </div>
+
+                <!-- Class Option 2 -->
+                <div onclick="selectClass('Diligent Fighter')" id="class-card-1" class="glass-btn p-4 rounded-xl cursor-pointer text-left border-slate-700 hover:border-indigo-400 transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-xl mb-2">
+                        <i class="fa-solid fa-shield-cat"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-100 text-sm">Diligent Fighter</h3>
+                    <p class="text-xs text-slate-400 mt-1">High HP & Pen Strike Attack Power.</p>
+                    <div class="mt-3 text-[11px] text-rose-300 font-semibold">HP: 130 | MP: 30 | ATK: 25</div>
+                </div>
+
+                <!-- Class Option 3 -->
+                <div onclick="selectClass('Disciplinarian Apprentice')" id="class-card-2" class="glass-btn p-4 rounded-xl cursor-pointer text-left border-slate-700 hover:border-indigo-400 transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl mb-2">
+                        <i class="fa-solid fa-scale-balanced"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-100 text-sm">Apprentice</h3>
+                    <p class="text-xs text-slate-400 mt-1">Balanced stats for all trials.</p>
+                    <div class="mt-3 text-[11px] text-amber-300 font-semibold">HP: 110 | MP: 50 | ATK: 20</div>
+                </div>
+            </div>
+
+            <button onclick="startGame()" class="w-full sm:w-auto px-10 py-3.5 bg-gradient-to-r from-indigo-600 to-amber-600 hover:from-indigo-500 hover:to-amber-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-950/50 transition-all text-sm uppercase tracking-wider">
+                Begin The Semester
+            </button>
+        </div>
+    </div>
+
+    <!-- NPC Interactive Dialogue Modal -->
+    <div id="dialogue-modal" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-2xl glass-panel p-5 rounded-2xl hidden border-l-4 border-l-amber-400">
+        <div class="flex items-start gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center text-2xl flex-shrink-0">
+                <i class="fa-solid fa-user-graduate"></i>
+            </div>
+            <div class="flex-1">
+                <h3 id="dialogue-speaker" class="font-bold text-amber-400 text-sm cinzel">Professor Orthodox</h3>
+                <p id="dialogue-text" class="text-xs sm:text-sm text-slate-200 mt-1 leading-relaxed">...</p>
+                <div class="mt-4 flex justify-end">
+                    <button onclick="closeDialogue()" class="px-4 py-1.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/50 text-xs font-semibold rounded-lg">Continue (E)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Modal -->
+    <div id="inventory-modal" class="absolute inset-0 z-30 glass-panel bg-slate-950/80 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-xl rounded-2xl p-6 border-indigo-500/30">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold cinzel text-indigo-300"><i class="fa-solid fa-bag-shopping mr-2"></i> Scholar Equipment & Bag</h3>
+                <button onclick="toggleModal('inventory-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <!-- Equipment Slots -->
+                <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                    <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Equipped Items</h4>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between p-2 bg-slate-950/60 rounded-lg text-xs">
+                            <span class="text-slate-400">Weapon:</span>
+                            <span id="eq-weapon" class="font-semibold text-slate-200">Pens of Truth (+15 ATK)</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 bg-slate-950/60 rounded-lg text-xs">
+                            <span class="text-slate-400">Accessory:</span>
+                            <span id="eq-accessory" class="font-semibold text-slate-200">Integrity Charm (+10 DEF)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bag Items Grid -->
+                <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+                    <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Consumables</h4>
+                    <div class="grid grid-cols-2 gap-2" id="bag-items-list">
+                        <!-- Items rendered via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quest Log Modal -->
+    <div id="quest-modal" class="absolute inset-0 z-30 glass-panel bg-slate-950/80 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-xl rounded-2xl p-6 border-amber-500/30">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold cinzel text-amber-400"><i class="fa-solid fa-scroll mr-2"></i> Academic Quest Log</h3>
+                <button onclick="toggleModal('quest-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="space-y-3 max-h-80 overflow-y-auto pr-2" id="quest-list-container">
+                <!-- Quests rendered via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Skills & Progression Modal -->
+    <div id="skills-modal" class="absolute inset-0 z-30 glass-panel bg-slate-950/80 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-xl rounded-2xl p-6 border-cyan-500/30">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-lg font-bold cinzel text-cyan-300"><i class="fa-solid fa-book-open-reader mr-2"></i> Skill Tree & Concentration</h3>
+                    <p class="text-xs text-slate-400">Available Skill Points: <span id="skill-points-display" class="text-cyan-300 font-bold">0</span></p>
+                </div>
+                <button onclick="toggleModal('skills-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="p-3 bg-slate-900/60 rounded-xl border border-cyan-900/40 text-center">
+                    <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg"><i class="fa-solid fa-bolt"></i></div>
+                    <h4 class="font-bold text-xs text-slate-100">Fast Reading</h4>
+                    <p class="text-[10px] text-slate-400 mt-1 mb-2">Reduces skill cooldowns by 15%.</p>
+                    <button onclick="upgradeSkill('fast_reading')" class="px-3 py-1 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/40 rounded text-xs w-full">Learn (1 SP)</button>
+                </div>
+
+                <div class="p-3 bg-slate-900/60 rounded-xl border border-cyan-900/40 text-center">
+                    <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center text-lg"><i class="fa-solid fa-shield"></i></div>
+                    <h4 class="font-bold text-xs text-slate-100">Deep Focus</h4>
+                    <p class="text-[10px] text-slate-400 mt-1 mb-2">Increases Maximum HP by +30.</p>
+                    <button onclick="upgradeSkill('deep_focus')" class="px-3 py-1 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/40 rounded text-xs w-full">Learn (1 SP)</button>
+                </div>
+
+                <div class="p-3 bg-slate-900/60 rounded-xl border border-cyan-900/40 text-center">
+                    <div class="w-10 h-10 mx-auto mb-2 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg"><i class="fa-solid fa-sun"></i></div>
+                    <h4 class="font-bold text-xs text-slate-100">Anti-Cheat Aura</h4>
+                    <p class="text-[10px] text-slate-400 mt-1 mb-2">Deals continuous aura damage to nearby cheaters.</p>
+                    <button onclick="upgradeSkill('anti_cheat')" class="px-3 py-1 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/40 rounded text-xs w-full">Learn (1 SP)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lore & Original Story Modal -->
+    <div id="lore-modal" class="absolute inset-0 z-30 glass-panel bg-slate-950/80 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-2xl rounded-2xl p-6 border-emerald-500/30 flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold cinzel text-emerald-400">Chapter 49: Bedtime Stories</h3>
+                    <p class="text-xs text-slate-400">The Legend Of Cheating — April 6, 2020</p>
+                </div>
+                <button onclick="toggleModal('lore-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="overflow-y-auto pr-3 space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                <p class="italic text-amber-300">From the creations of Cheaters Gonna Hate Education And "The Rages Band"</p>
+                
+                <p>Once upon a time there is school name “No Cheating College School”. There is a professor too Orthodox. He is the disciplinarian and the strict teacher in the “No Cheating College School”. What the policy he says over and over again the students who didn’t discipline very well. There is no education will portray to the student who is very lazy. And wanted to cheat even in the social media with hacking device.</p>
+
+                <p>In that case in “No Cheating College School”. All of the college students hear what Orthodox said. The college students say, Yes we will do as you say. We need to study very hard and not cheating. Be honest so that when the dreams come true. We very easy to take an ambition or education.</p>
+
+                <p>Few college students tricked the professor and wanted to become liars: <strong>Diego, Essi, Dolmar, Peri</strong>. Those few college students is cheating in regular exam and virtual exam on the internet with hacking devices. When they already finished answering tests, quizzes and exam online and regular exam by pen, they finished in just 10 minutes because of pages taken beforehand!</p>
+
+                <p>Professor Orthodox investigates why Diego, Essi, Dolmar and Peri finished answering at the exact same time in 10 minutes. He questioned them, challenged them on the spot, and caught them red-handed! They had zero knowledge of the answers!</p>
+
+                <p>While Professor Orthodox changed himself into a wizard, he is now called not a professor but <strong>“The Legend Of Cheating”</strong>. He cursed the cheaters to lose all ability to learn, clean, care for themselves, or fix anything, sticking them in their homes in laziness until their final days.</p>
+
+                <p>Meanwhile, the honest, hard-working students graduated, becoming successful employees and honoring Professor Orthodox’s teachings of true discipline and honesty.</p>
+
+                <div class="p-3 bg-amber-950/40 border border-amber-500/30 rounded-lg text-amber-200 mt-4">
+                    <strong>Moral Lesson:</strong> Be humble, study very hard, no more cheating. Because you can’t absorb knowledge if you act prideful and stupid by cheating. Without learning, you cannot accomplish your dreams!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* --- SOUND SYNTHESIZER (Web Audio API) --- */
+        class SoundFX {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            playTone(freq, duration, type='sine', gainVal=0.1) {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+            attack() { this.playTone(440, 0.1, 'triangle', 0.15); }
+            spell() { this.playTone(880, 0.3, 'sine', 0.2); }
+            hit() { this.playTone(150, 0.15, 'sawtooth', 0.2); }
+            levelup() {
+                this.playTone(523.25, 0.15, 'sine', 0.2);
+                setTimeout(() => this.playTone(659.25, 0.15, 'sine', 0.2), 150);
+                setTimeout(() => this.playTone(783.99, 0.3, 'sine', 0.2), 300);
+            }
+            questComplete() {
+                this.playTone(587.33, 0.2, 'triangle', 0.2);
+                setTimeout(() => this.playTone(880, 0.4, 'triangle', 0.2), 200);
+            }
+        }
+        const sfx = new SoundFX();
+
+        /* --- GAME STATE & DATA --- */
+        const gameState = {
+            player: {
+                name: "Scholar",
+                class: "Honest Scholar",
+                level: 1,
+                hp: 100,
+                maxHp: 100,
+                mp: 50,
+                maxMp: 50,
+                xp: 0,
+                maxXp: 100,
+                atk: 20,
+                def: 10,
+                spd: 0.18,
+                skillPoints: 0,
+                skills: { fast_reading: false, deep_focus: false, anti_cheat: false }
+            },
+            inventory: [
+                { id: 'hp_potion', name: 'Study Guide (+30 HP)', count: 3, icon: 'fa-book-medical' },
+                { id: 'mp_potion', name: 'Truth Elixir (+25 MP)', count: 2, icon: 'fa-flask' }
+            ],
+            quests: [
+                { id: 1, title: 'Pass the Orthodox Exam', desc: 'Collect 5 Knowledge Orbs in the school courtyard.', target: 5, current: 0, completed: false, active: true },
+                { id: 2, title: 'Expose the Cheaters', desc: 'Defeat the cheater minions (Diego, Essi, Dolmar, Peri).', target: 4, current: 0, completed: false, active: false },
+                { id: 3, title: 'Trial of the Legend', desc: 'Confront Wizard Orthodox ("The Legend Of Cheating").', target: 1, current: 0, completed: false, active: false }
+            ],
+            cameraFirstPerson: false,
+            keys: {},
+            activeCooldowns: { 1: false, 2: false, 3: false }
+        };
+
+        /* --- THREE.JS ENGINE SETUP --- */
+        let scene, camera, renderer, controls;
+        let playerMesh, playerBody;
+        let ground, campusBuildings = [];
+        let knowledgeOrbs = [];
+        let enemies = [];
+        let bossEnemy = null;
+        let npcs = [];
+
+        function init3D() {
+            const canvas = document.getElementById('webgl-canvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0f1d);
+            scene.fog = new THREE.FogExp2(0x0a0f1d, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.6);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfef08a, 1.2);
+            sunLight.position.set(40, 60, 20);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+            scene.add(sunLight);
+
+            // Orbit Controls (for third-person adjustments)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+            // Build Environment
+            buildSchoolCampus();
+            createPlayerMesh();
+            spawnKnowledgeOrbs();
+            spawnNPCs();
+            spawnCheaterEnemies();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('keydown', (e) => {
+                gameState.keys[e.code] = true;
+                if (e.code === 'KeyI') toggleModal('inventory-modal');
+                if (e.code === 'KeyQ') toggleModal('quest-modal');
+                if (e.code === 'KeyK') toggleModal('skills-modal');
+                if (e.code === 'KeyL') toggleModal('lore-modal');
+                if (e.code === 'KeyC') toggleCameraView();
+                if (e.code === 'KeyF') playerAttack();
+                if (e.code === 'Digit1') useSkill(1);
+                if (e.code === 'Digit2') useSkill(2);
+                if (e.code === 'Digit3') useSkill(3);
+            });
+            window.addEventListener('keyup', (e) => { gameState.keys[e.code] = false; });
+            canvas.addEventListener('click', playerAttack);
+
+            animate();
+        }
+
+        function buildSchoolCampus() {
+            // Ground Grass / Courtyard
+            const groundGeo = new THREE.PlaneGeometry(200, 200);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Courtyard Pathways
+            const pathGeo = new THREE.PlaneGeometry(16, 160);
+            const pathMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
+            const path1 = new THREE.Mesh(pathGeo, pathMat);
+            path1.rotation.x = -Math.PI / 2;
+            path1.position.y = 0.01;
+            scene.add(path1);
+
+            const path2 = new THREE.Mesh(pathGeo, pathMat);
+            path2.rotation.x = -Math.PI / 2;
+            path2.rotation.z = Math.PI / 2;
+            path2.position.y = 0.01;
+            scene.add(path2);
+
+            // School Building Main Hall ("No Cheating College")
+            const buildingGeo = new THREE.BoxGeometry(40, 20, 25);
+            const buildingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
+            const mainHall = new THREE.Mesh(buildingGeo, buildingMat);
+            mainHall.position.set(0, 10, -50);
+            mainHall.castShadow = true;
+            mainHall.receiveShadow = true;
+            scene.add(mainHall);
+
+            // Pillars on Main Building
+            for(let i = -15; i <= 15; i += 10) {
+                const pillarGeo = new THREE.CylinderGeometry(1, 1, 18);
+                const pillarMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+                const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                pillar.position.set(i, 9, -37);
+                scene.add(pillar);
+            }
+
+            // Floating Magic Books/Papers Decorative Props
+            for(let i = 0; i < 20; i++) {
+                const paperGeo = new THREE.BoxGeometry(1.2, 0.05, 0.8);
+                const paperMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0x38bdf8, emissiveIntensity: 0.2 });
+                const paper = new THREE.Mesh(paperGeo, paperMat);
+                paper.position.set((Math.random() - 0.5) * 80, 1.5 + Math.random() * 4, (Math.random() - 0.5) * 80);
+                paper.rotation.set(Math.random(), Math.random(), Math.random());
+                scene.add(paper);
+            }
+        }
+
+        function createPlayerMesh() {
+            const group = new THREE.Group();
+            
+            // Player Body
+            const bodyGeo = new THREE.CylinderGeometry(0.6, 0.4, 2);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x6366f1, roughness: 0.3 });
+            playerBody = new THREE.Mesh(bodyGeo, bodyMat);
+            playerBody.position.y = 1;
+            playerBody.castShadow = true;
+            group.add(playerBody);
+
+            // Graduation Cap / Head
+            const headGeo = new THREE.SphereGeometry(0.5);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.2;
+            group.add(head);
+
+            const capGeo = new THREE.BoxGeometry(1.2, 0.1, 1.2);
+            const capMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b });
+            const cap = new THREE.Mesh(capGeo, capMat);
+            cap.position.y = 2.6;
+            group.add(cap);
+
+            group.position.set(0, 0, 30);
+            scene.add(group);
+            playerMesh = group;
+        }
+
+        function spawnKnowledgeOrbs() {
+            const orbPositions = [
+                {x: -15, z: -10}, {x: 20, z: -20}, {x: -30, z: 15}, {x: 25, z: 25}, {x: 0, z: -25}
+            ];
+
+            orbPositions.forEach((pos, idx) => {
+                const group = new THREE.Group();
+                const geo = new THREE.IcosahedronGeometry(0.8, 2);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 0.8 });
+                const mesh = new THREE.Mesh(geo, mat);
+                group.add(mesh);
+
+                group.position.set(pos.x, 1.5, pos.z);
+                group.userData = { id: idx, collected: false };
+                scene.add(group);
+                knowledgeOrbs.push(group);
+            });
+        }
+
+        function spawnNPCs() {
+            // Professor Orthodox NPC
+            const npcGroup = new THREE.Group();
+            const bodyGeo = new THREE.CylinderGeometry(0.7, 0.5, 2.4);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.2;
+            npcGroup.add(body);
+
+            npcGroup.position.set(0, 0, -32);
+            npcGroup.userData = { name: "Professor Orthodox", dialogue: "Education requires discipline! Cheating produces no true knowledge!" };
+            scene.add(npcGroup);
+            npcs.push(npcGroup);
+        }
+
+        function spawnCheaterEnemies() {
+            const cheaterNames = ["Diego (Hacker)", "Essi (Tricker)", "Dolmar (Liar)", "Peri (Cheat Sheet)"];
+            const coords = [{x: -25, z: -15}, {x: 25, z: -15}, {x: -20, z: 10}, {x: 20, z: 10}];
+
+            coords.forEach((pos, i) => {
+                const group = new THREE.Group();
+                const geo = new THREE.BoxGeometry(1.2, 2, 1.2);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.y = 1;
+                group.add(mesh);
+
+                group.position.set(pos.x, 0, pos.z);
+                group.userData = { 
+                    name: cheaterNames[i], 
+                    hp: 80, 
+                    maxHp: 80, 
+                    atk: 10, 
+                    alive: true,
+                    isBoss: false 
+                };
+                scene.add(group);
+                enemies.push(group);
+            });
+        }
+
+        function spawnWizardOrthodoxBoss() {
+            const group = new THREE.Group();
+            const geo = new THREE.CylinderGeometry(1.2, 0.8, 4);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x7c3aed, emissive: 0x4c1d95, emissiveIntensity: 0.5 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.y = 2;
+            group.add(mesh);
+
+            // Floating Halo
+            const ringGeo = new THREE.TorusGeometry(1.5, 0.1, 16, 32);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 4.2;
+            group.add(ring);
+
+            group.position.set(0, 0, -42);
+            group.userData = { 
+                name: "Wizard Orthodox (The Legend Of Cheating)", 
+                hp: 500, 
+                maxHp: 500, 
+                atk: 22, 
+                alive: true, 
+                isBoss: true 
+            };
+            scene.add(group);
+            bossEnemy = group;
+            enemies.push(group);
+
+            document.getElementById('boss-hp-container').classList.remove('hidden');
+        }
+
+        function updatePlayerMovement() {
+            if (!playerMesh) return;
+
+            const moveSpeed = gameState.player.spd;
+            let moveX = 0;
+            let moveZ = 0;
+
+            if (gameState.keys['KeyW'] || gameState.keys['ArrowUp']) moveZ -= 1;
+            if (gameState.keys['KeyS'] || gameState.keys['ArrowDown']) moveZ += 1;
+            if (gameState.keys['KeyA'] || gameState.keys['ArrowLeft']) moveX -= 1;
+            if (gameState.keys['KeyD'] || gameState.keys['ArrowRight']) moveX += 1;
+
+            if (moveX !== 0 || moveZ !== 0) {
+                const angle = Math.atan2(moveX, moveZ);
+                playerMesh.position.x += Math.sin(angle) * moveSpeed;
+                playerMesh.position.z += Math.cos(angle) * moveSpeed;
+                playerMesh.rotation.y = angle;
+            }
+
+            // Camera follow
+            if (gameState.cameraFirstPerson) {
+                camera.position.set(playerMesh.position.x, playerMesh.position.y + 2.2, playerMesh.position.z);
+            } else {
+                camera.position.set(playerMesh.position.x, playerMesh.position.y + 8, playerMesh.position.z + 12);
+                camera.lookAt(playerMesh.position.x, playerMesh.position.y + 1, playerMesh.position.z);
+            }
+
+            // Minimap player position indicator
+            const minimapPlayer = document.getElementById('minimap-player');
+            if (minimapPlayer) {
+                const mapX = (playerMesh.position.x / 100) * 40;
+                const mapZ = (playerMesh.position.z / 100) * 40;
+                minimapPlayer.style.transform = `translate(${mapX}px, ${mapZ}px)`;
+            }
+
+            // Check Knowledge Orb Collections
+            knowledgeOrbs.forEach(orb => {
+                if (!orb.userData.collected) {
+                    orb.rotation.y += 0.03;
+                    const dist = playerMesh.position.distanceTo(orb.position);
+                    if (dist < 2) {
+                        orb.userData.collected = true;
+                        orb.visible = false;
+                        sfx.levelup();
+                        addXP(25);
+
+                        // Update Quest 1
+                        const q1 = gameState.quests.find(q => q.id === 1);
+                        if (q1 && q1.active && !q1.completed) {
+                            q1.current++;
+                            updateQuestHUD();
+                            if (q1.current >= q1.target) {
+                                q1.completed = true;
+                                q1.active = false;
+                                sfx.questComplete();
+                                showFloatingText(playerMesh.position, "QUEST COMPLETED!", "#f59e0b");
+                                
+                                // Unlock Quest 2
+                                const q2 = gameState.quests.find(q => q.id === 2);
+                                if (q2) q2.active = true;
+                                updateQuestHUD();
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Check NPC Interact
+            npcs.forEach(npc => {
+                const dist = playerMesh.position.distanceTo(npc.position);
+                if (dist < 4 && gameState.keys['KeyE']) {
+                    triggerDialogue(npc.userData.name, npc.userData.dialogue);
+                }
+            });
+        }
+
+        function playerAttack() {
+            if (!playerMesh) return;
+            sfx.attack();
+
+            // Simple forward slash particle / visual ray
+            enemies.forEach(enemy => {
+                if (enemy.userData.alive) {
+                    const dist = playerMesh.position.distanceTo(enemy.position);
+                    if (dist < 4) {
+                        const dmg = Math.floor(gameState.player.atk * (0.9 + Math.random() * 0.3));
+                        damageEnemy(enemy, dmg);
+                    }
+                }
+            });
+        }
+
+        function useSkill(slot) {
+            if (gameState.activeCooldowns[slot]) return;
+
+            if (slot === 1 && gameState.player.mp >= 10) { // Ban Hack Device (AOE)
+                gameState.player.mp -= 10;
+                sfx.spell();
+                startCooldown(1, 3);
+                enemies.forEach(e => {
+                    if (e.userData.alive && playerMesh.position.distanceTo(e.position) < 8) {
+                        damageEnemy(e, gameState.player.atk * 1.5);
+                    }
+                });
+            } else if (slot === 2 && gameState.player.mp >= 15) { // Truth Shield
+                gameState.player.mp -= 15;
+                sfx.spell();
+                startCooldown(2, 8);
+                gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + 30);
+                showFloatingText(playerMesh.position, "+30 HEAL", "#38bdf8");
+            } else if (slot === 3 && gameState.player.mp >= 25) { // Orthodox Judgment Ultimate
+                gameState.player.mp -= 25;
+                sfx.spell();
+                startCooldown(3, 12);
+                enemies.forEach(e => {
+                    if (e.userData.alive && playerMesh.position.distanceTo(e.position) < 12) {
+                        damageEnemy(e, gameState.player.atk * 2.8);
+                    }
+                });
+            }
+            updateHUDStats();
+        }
+
+        function startCooldown(slot, seconds) {
+            gameState.activeCooldowns[slot] = true;
+            const cdEl = document.getElementById(`cd-${slot}`);
+            cdEl.classList.remove('hidden');
+            let remaining = seconds;
+            cdEl.innerText = `${remaining}s`;
+
+            const interval = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    gameState.activeCooldowns[slot] = false;
+                    cdEl.classList.add('hidden');
+                } else {
+                    cdEl.innerText = `${remaining}s`;
+                }
+            }, 1000);
+        }
+
+        function damageEnemy(enemy, damage) {
+            enemy.userData.hp -= Math.floor(damage);
+            showFloatingText(enemy.position, `-${Math.floor(damage)}`, "#ef4444");
+
+            if (enemy.userData.isBoss) {
+                const bossHpBar = document.getElementById('boss-hp-bar');
+                const bossHpText = document.getElementById('boss-hp-text');
+                const pct = Math.max(0, (enemy.userData.hp / enemy.userData.maxHp) * 100);
+                bossHpBar.style.width = `${pct}%`;
+                bossHpText.innerText = `${Math.max(0, enemy.userData.hp)} / ${enemy.userData.maxHp}`;
+            }
+
+            if (enemy.userData.hp <= 0) {
+                enemy.userData.alive = false;
+                enemy.visible = false;
+                addXP(50);
+
+                // Quest Progress Check
+                const q2 = gameState.quests.find(q => q.id === 2);
+                if (q2 && q2.active && !q2.completed && !enemy.userData.isBoss) {
+                    q2.current++;
+                    updateQuestHUD();
+                    if (q2.current >= q2.target) {
+                        q2.completed = true;
+                        q2.active = false;
+                        sfx.questComplete();
+                        showFloatingText(playerMesh.position, "ALL CHEATERS EXPOSED!", "#f59e0b");
+                        
+                        // Spawn Final Boss & Quest 3
+                        spawnWizardOrthodoxBoss();
+                        const q3 = gameState.quests.find(q => q.id === 3);
+                        if (q3) q3.active = true;
+                        updateQuestHUD();
+                    }
+                }
+
+                // Final Boss Victory
+                if (enemy.userData.isBoss) {
+                    const q3 = gameState.quests.find(q => q.id === 3);
+                    if (q3) {
+                        q3.completed = true;
+                        q3.current = 1;
+                        updateQuestHUD();
+                    }
+                    sfx.questComplete();
+                    triggerDialogue("Wizard Orthodox", "You have proven your honesty and dedication! No cheating shall ever plague No Cheating College School again!");
+                }
+            }
+        }
+
+        function updateEnemyAI() {
+            enemies.forEach(enemy => {
+                if (enemy.userData.alive && playerMesh) {
+                    const dist = enemy.position.distanceTo(playerMesh.position);
+                    if (dist < 15 && dist > 1.8) {
+                        // Move towards player
+                        const dir = new THREE.Vector3().subVectors(playerMesh.position, enemy.position).normalize();
+                        enemy.position.addScaledVector(dir, 0.05);
+                        enemy.lookAt(playerMesh.position.x, enemy.position.y, playerMesh.position.z);
+                    } else if (dist <= 1.8) {
+                        // Attack player
+                        if (Math.random() < 0.02) {
+                            const dmg = Math.max(1, enemy.userData.atk - gameState.player.def / 2);
+                            gameState.player.hp = Math.max(0, gameState.player.hp - dmg);
+                            sfx.hit();
+                            showFloatingText(playerMesh.position, `-${Math.floor(dmg)}`, "#f43f5e");
+                            updateHUDStats();
+                            if (gameState.player.hp <= 0) {
+                                alert("You were overwhelmed by cheating devices! Restarting trial...");
+                                window.location.reload();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function addXP(amount) {
+            gameState.player.xp += amount;
+            if (gameState.player.xp >= gameState.player.maxXp) {
+                gameState.player.level++;
+                gameState.player.xp -= gameState.player.maxXp;
+                gameState.player.maxXp = Math.floor(gameState.player.maxXp * 1.5);
+                gameState.player.maxHp += 20;
+                gameState.player.hp = gameState.player.maxHp;
+                gameState.player.atk += 5;
+                gameState.player.skillPoints++;
+                sfx.levelup();
+                showFloatingText(playerMesh.position, "LEVEL UP!", "#f59e0b");
+            }
+            updateHUDStats();
+        }
+
+        function updateHUDStats() {
+            document.getElementById('hp-text').innerText = `${Math.floor(gameState.player.hp)} / ${gameState.player.maxHp}`;
+            document.getElementById('hp-bar').style.width = `${(gameState.player.hp / gameState.player.maxHp) * 100}%`;
+
+            document.getElementById('mp-text').innerText = `${Math.floor(gameState.player.mp)} / ${gameState.player.maxMp}`;
+            document.getElementById('mp-bar').style.width = `${(gameState.player.mp / gameState.player.maxMp) * 100}%`;
+
+            document.getElementById('xp-text').innerText = `${gameState.player.xp} / ${gameState.player.maxXp}`;
+            document.getElementById('xp-bar').style.width = `${(gameState.player.xp / gameState.player.maxXp) * 100}%`;
+
+            document.getElementById('hud-player-level').innerText = `LVL ${gameState.player.level}`;
+            document.getElementById('skill-points-display').innerText = gameState.player.skillPoints;
+        }
+
+        function updateQuestHUD() {
+            const activeQuest = gameState.quests.find(q => q.active) || gameState.quests.find(q => q.completed && q.id === 3);
+            if (activeQuest) {
+                document.getElementById('hud-quest-title').innerText = activeQuest.title;
+                document.getElementById('hud-quest-desc').innerText = activeQuest.desc;
+                document.getElementById('hud-quest-progress').innerText = `Progress: ${activeQuest.current} / ${activeQuest.target}`;
+            }
+
+            // Render Quest Modal List
+            const container = document.getElementById('quest-list-container');
+            container.innerHTML = gameState.quests.map(q => `
+                <div class="p-3 bg-slate-900/60 rounded-xl border ${q.completed ? 'border-emerald-500/40' : q.active ? 'border-amber-500/40' : 'border-slate-800'}">
+                    <div class="flex justify-between items-center">
+                        <h4 class="font-bold text-xs ${q.completed ? 'text-emerald-400' : 'text-slate-200'}">${q.title}</h4>
+                        <span class="text-[10px] px-2 py-0.5 rounded font-bold ${q.completed ? 'bg-emerald-950 text-emerald-300' : q.active ? 'bg-amber-950 text-amber-300' : 'bg-slate-800 text-slate-500'}">
+                            ${q.completed ? 'COMPLETED' : q.active ? 'IN PROGRESS' : 'LOCKED'}
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1">${q.desc}</p>
+                </div>
+            `).join('');
+        }
+
+        function renderBagItems() {
+            const container = document.getElementById('bag-items-list');
+            container.innerHTML = gameState.inventory.map(item => `
+                <div class="p-2 bg-slate-950/60 rounded-lg border border-slate-800 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-200"><i class="fa-solid ${item.icon} mr-1 text-indigo-400"></i> ${item.name}</div>
+                        <div class="text-[10px] text-slate-400">Qty: ${item.count}</div>
+                    </div>
+                    <button onclick="useBagItem('${item.id}')" class="px-2 py-1 bg-indigo-600/40 hover:bg-indigo-600 text-xs rounded text-indigo-200">Use</button>
+                </div>
+            `).join('');
+        }
+
+        function useBagItem(id) {
+            const item = gameState.inventory.find(i => i.id === id);
+            if (item && item.count > 0) {
+                item.count--;
+                if (id === 'hp_potion') {
+                    gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + 30);
+                } else if (id === 'mp_potion') {
+                    gameState.player.mp = Math.min(gameState.player.maxMp, gameState.player.mp + 25);
+                }
+                updateHUDStats();
+                renderBagItems();
+            }
+        }
+
+        function upgradeSkill(skillKey) {
+            if (gameState.player.skillPoints > 0 && !gameState.player.skills[skillKey]) {
+                gameState.player.skillPoints--;
+                gameState.player.skills[skillKey] = true;
+                if (skillKey === 'deep_focus') gameState.player.maxHp += 30;
+                sfx.levelup();
+                updateHUDStats();
+            }
+        }
+
+        function triggerDialogue(speaker, text) {
+            document.getElementById('dialogue-speaker').innerText = speaker;
+            document.getElementById('dialogue-text').innerText = text;
+            document.getElementById('dialogue-modal').classList.remove('hidden');
+        }
+
+        function closeDialogue() {
+            document.getElementById('dialogue-modal').classList.add('hidden');
+        }
+
+        function toggleModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                if (modalId === 'inventory-modal') renderBagItems();
+                if (modalId === 'quest-modal') updateQuestHUD();
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function toggleCameraView() {
+            gameState.cameraFirstPerson = !gameState.cameraFirstPerson;
+            const crosshair = document.getElementById('crosshair');
+            if (gameState.cameraFirstPerson) {
+                crosshair.classList.remove('hidden');
+            } else {
+                crosshair.classList.add('hidden');
+            }
+        }
+
+        function showFloatingText(pos3D, text, color) {
+            const screenPos = pos3D.clone().project(camera);
+            const x = (screenPos.x * .5 + .5) * window.innerWidth;
+            const y = (-(screenPos.y * .5) + .5) * window.innerHeight;
+
+            const el = document.createElement('div');
+            el.className = 'dmg-text';
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.color = color;
+            el.innerText = text;
+            document.body.appendChild(el);
+
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function selectClass(className) {
+            gameState.player.class = className;
+            if (className === 'Honest Scholar') {
+                gameState.player.hp = 90; gameState.player.maxHp = 90;
+                gameState.player.mp = 80; gameState.player.maxMp = 80;
+                gameState.player.atk = 18;
+            } else if (className === 'Diligent Fighter') {
+                gameState.player.hp = 130; gameState.player.maxHp = 130;
+                gameState.player.mp = 30; gameState.player.maxMp = 30;
+                gameState.player.atk = 25;
+            } else {
+                gameState.player.hp = 110; gameState.player.maxHp = 110;
+                gameState.player.mp = 50; gameState.player.maxMp = 50;
+                gameState.player.atk = 20;
+            }
+            document.getElementById('hud-player-name').innerText = className;
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('hud-layer').classList.remove('hidden');
+            init3D();
+            updateHUDStats();
+            updateQuestHUD();
+            triggerDialogue("Professor Orthodox", "Welcome to No Cheating College School! Your first task: collect 5 Knowledge Orbs scattered in the courtyard!");
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /* --- MAIN RENDER LOOP --- */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updatePlayerMovement();
+            updateEnemyAI();
+
+            // Passive Mana Regen
+            if (gameState.player.mp < gameState.player.maxMp) {
+                gameState.player.mp = Math.min(gameState.player.maxMp, gameState.player.mp + 0.05);
+                updateHUDStats();
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
